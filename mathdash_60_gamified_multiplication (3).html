@@ -1,0 +1,1495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MathDash 60 - Gamified Multiplication Realm</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Alpine.js -->
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <!-- Tone.js for Audio Synthesis -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700;800&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                        display: ['Fredoka', 'cursive'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        space: {
+                            950: '#040711',
+                            900: '#080d1e',
+                            800: '#111936',
+                            700: '#1c2850',
+                            accent: '#38bdf8',
+                            neonGreen: '#10b981',
+                            neonPink: '#ec4899',
+                            laserYellow: '#f59e0b',
+                            purpleGlow: '#8b5cf6'
+                        }
+                    },
+                    animation: {
+                        'pulse-glow': 'pulseGlow 2s infinite ease-in-out',
+                        'float': 'float 3s infinite ease-in-out',
+                    },
+                    keyframes: {
+                        pulseGlow: {
+                            '0%, 100%': { opacity: '0.8', transform: 'scale(1)' },
+                            '50%': { opacity: '1', transform: 'scale(1.03)' }
+                        },
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0px)' },
+                            '50%': { transform: 'translateY(-8px)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #040711;
+            color: #f3f4f6;
+            min-height: 100vh;
+            user-select: none;
+            overflow-x: hidden;
+        }
+        .glass-panel {
+            background: rgba(17, 25, 54, 0.75);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(56, 189, 248, 0.15);
+        }
+        .glass-panel-gold {
+            background: rgba(30, 24, 12, 0.85);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(245, 158, 11, 0.35);
+        }
+        .numpad-btn {
+            background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+            border: 1px solid #334155;
+            box-shadow: 0 4px 0 #020617;
+            transition: all 0.05s ease;
+        }
+        .numpad-btn:active {
+            transform: translateY(3px);
+            box-shadow: 0 1px 0 #020617;
+        }
+    </style>
+</head>
+<body x-data="mathDashApp()" x-init="init()" class="flex flex-col min-h-screen relative selection:bg-space-accent selection:text-black">
+
+    <header class="sticky top-0 z-50 glass-panel border-b border-space-700/50 px-4 py-2.5">
+        <div class="max-w-6xl mx-auto flex items-center justify-between">
+            
+            <!-- Logo & Level Badge -->
+            <div class="flex items-center space-x-3 cursor-pointer" @click="setTab('dashboard')">
+                <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-cyan-500 via-indigo-500 to-fuchsia-500 flex items-center justify-center text-xl shadow-lg shadow-cyan-500/30 animate-pulse-glow"
+                     x-text="equippedAvatar.icon">
+                </div>
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <h1 class="font-display font-black text-xl tracking-wide text-white">
+                            MATH<span class="text-space-accent">DASH</span> <span class="text-amber-400">60</span>
+                        </h1>
+                        <span class="text-[10px] font-mono font-extrabold bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded-md border border-indigo-500/30" x-text="equippedTitle.name"></span>
+                    </div>
+                    <div class="flex items-center space-x-3 text-[11px] font-bold text-slate-400">
+                        <span>Lvl <span class="text-amber-400 font-mono" x-text="level"></span> <span class="text-slate-300" x-text="rankTitle"></span></span>
+                        <span>•</span>
+                        <span>XP: <span class="text-cyan-400 font-mono" x-text="`${xp}/${nextLevelXp}`"></span></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Green Light Gauge & Math Coins -->
+            <div class="flex items-center space-x-3 sm:space-x-5">
+                <!-- Daily Green Light Fluency Bar -->
+                <div class="hidden md:flex flex-col items-end w-36">
+                    <div class="flex justify-between w-full text-[10px] font-bold mb-0.5">
+                        <span class="text-emerald-400 flex items-center space-x-1">
+                            <i class="fa-solid fa-bolt text-amber-400"></i>
+                            <span>GREEN LIGHT</span>
+                        </span>
+                        <span class="text-white font-mono" x-text="`${greenLightProgress}%`"></span>
+                    </div>
+                    <div class="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden border border-slate-700">
+                        <div class="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400 transition-all duration-500"
+                             :style="`width: ${greenLightProgress}%`"></div>
+                    </div>
+                </div>
+
+                <!-- Math Coins -->
+                <div class="bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 rounded-xl text-amber-300 font-mono font-extrabold text-xs flex items-center space-x-1.5">
+                    <span class="text-base">🪙</span>
+                    <span x-text="coins"></span>
+                </div>
+
+                <!-- Sound Toggle -->
+                <button @click="toggleSound()" class="p-2 bg-slate-800/80 hover:bg-slate-700 rounded-xl text-slate-300 transition" :title="soundEnabled ? 'Mute Audio' : 'Unmute Audio'">
+                    <i class="fa-solid" :class="soundEnabled ? 'fa-volume-high text-emerald-400' : 'fa-volume-xmark text-slate-500'"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <nav class="bg-space-950/90 border-b border-space-800 px-4 py-1.5 z-40 sticky top-[57px]">
+        <div class="max-w-4xl mx-auto flex items-center justify-between text-xs font-bold overflow-x-auto whitespace-nowrap">
+            <button @click="setTab('dashboard')" :class="activeTab === 'dashboard' ? 'text-space-accent border-b-2 border-space-accent pb-1' : 'text-slate-400 hover:text-white'" class="py-1 px-2 flex items-center space-x-1.5">
+                <i class="fa-solid fa-chart-line"></i>
+                <span>Hub & Fluency</span>
+            </button>
+            <button @click="setTab('asteroid')" :class="activeTab === 'asteroid' ? 'text-amber-400 border-b-2 border-amber-400 pb-1' : 'text-slate-400 hover:text-white'" class="py-1 px-2 flex items-center space-x-1.5">
+                <i class="fa-solid fa-meteor text-rose-400"></i>
+                <span>Asteroid Blaster 3D</span>
+            </button>
+            <button @click="setTab('ninja')" :class="activeTab === 'ninja' ? 'text-amber-400 border-b-2 border-amber-400 pb-1' : 'text-slate-400 hover:text-white'" class="py-1 px-2 flex items-center space-x-1.5">
+                <i class="fa-solid fa-user-ninja text-emerald-400"></i>
+                <span>Ninja Dash</span>
+            </button>
+            <button @click="setTab('sprint')" :class="activeTab === 'sprint' ? 'text-amber-400 border-b-2 border-amber-400 pb-1' : 'text-slate-400 hover:text-white'" class="py-1 px-2 flex items-center space-x-1.5">
+                <i class="fa-solid fa-stopwatch text-cyan-400"></i>
+                <span>3-Min Sprint (60 Qs)</span>
+            </button>
+            <button @click="setTab('matrix')" :class="activeTab === 'matrix' ? 'text-amber-400 border-b-2 border-amber-400 pb-1' : 'text-slate-400 hover:text-white'" class="py-1 px-2 flex items-center space-x-1.5">
+                <i class="fa-solid fa-table-cells"></i>
+                <span>12x12 Matrix</span>
+            </button>
+            <button @click="setTab('shop')" :class="activeTab === 'shop' ? 'text-amber-400 border-b-2 border-amber-400 pb-1' : 'text-slate-400 hover:text-white'" class="py-1 px-2 flex items-center space-x-1.5">
+                <i class="fa-solid fa-store text-amber-400"></i>
+                <span>Math Locker</span>
+            </button>
+        </div>
+    </nav>
+
+    <main class="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 flex flex-col">
+
+        <!-- ================= TAB 1: DASHBOARD HUB ================= -->
+        <div x-show="activeTab === 'dashboard'" x-transition class="space-y-6 my-auto">
+            
+            <!-- Hero Banner -->
+            <div class="glass-panel rounded-3xl p-6 sm:p-8 relative overflow-hidden shadow-2xl border border-cyan-500/30">
+                <div class="absolute -right-10 -bottom-10 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <span class="bg-emerald-500/20 text-emerald-300 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border border-emerald-500/30">Target: 6th Grade Fluency</span>
+                            <span x-show="hasGreenLight" class="bg-amber-500/20 text-amber-300 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border border-amber-500/30 animate-pulse">⚡ Green Light Active</span>
+                        </div>
+                        <h2 class="text-3xl sm:text-4xl font-display font-black text-white mt-2">
+                            Master <span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-amber-300 to-emerald-400">1 to 12 Facts</span> in 3 Minutes!
+                        </h2>
+                        <p class="text-slate-300 text-xs sm:text-sm mt-2 max-w-xl">
+                            Train with adaptive AI games! Speed through 60 facts, blast real space asteroids, and achieve instant recall under 2.5 seconds per equation.
+                        </p>
+                    </div>
+
+                    <!-- Mode Quick Launch Grid -->
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        <button @click="setTab('asteroid')" class="p-4 rounded-2xl bg-gradient-to-br from-space-800 to-slate-900 border border-rose-500/40 hover:border-rose-400 text-left transition transform hover:-translate-y-1 shadow-lg group">
+                            <div class="text-2xl mb-1 group-hover:scale-110 transition">☄️</div>
+                            <div class="font-display font-bold text-xs text-white">Asteroid Blaster</div>
+                            <div class="text-[10px] text-slate-400">Realistic Space Arcade</div>
+                        </button>
+
+                        <button @click="setTab('ninja')" class="p-4 rounded-2xl bg-gradient-to-br from-space-800 to-slate-900 border border-emerald-500/40 hover:border-emerald-400 text-left transition transform hover:-translate-y-1 shadow-lg group">
+                            <div class="text-2xl mb-1 group-hover:scale-110 transition">🥷</div>
+                            <div class="font-display font-bold text-xs text-white">Ninja Dash</div>
+                            <div class="text-[10px] text-slate-400">Rooftop Runner</div>
+                        </button>
+
+                        <button @click="setTab('sprint')" class="p-4 rounded-2xl bg-gradient-to-br from-space-800 to-slate-900 border border-cyan-500/40 hover:border-cyan-400 text-left transition transform hover:-translate-y-1 shadow-lg group col-span-2 sm:col-span-1">
+                            <div class="text-2xl mb-1 group-hover:scale-110 transition">⏱️</div>
+                            <div class="font-display font-bold text-xs text-white">3-Min Sprint</div>
+                            <div class="text-[10px] text-slate-400">60 Question Test</div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fluency Stats & Overview -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <div class="glass-panel p-5 rounded-3xl border border-space-700 flex flex-col justify-between">
+                    <h3 class="font-display font-bold text-sm text-cyan-300 flex items-center space-x-2">
+                        <i class="fa-solid fa-gauge-high"></i>
+                        <span>Fluency Metrics</span>
+                    </h3>
+                    
+                    <div class="space-y-4 my-4">
+                        <div class="flex justify-between items-center bg-space-900/80 p-3 rounded-2xl border border-space-800">
+                            <span class="text-xs text-slate-400 font-bold">Fluent Facts (&lt; 2.5s):</span>
+                            <span class="font-mono font-black text-emerald-400 text-lg" x-text="`${fluentFactCount} / 144`"></span>
+                        </div>
+
+                        <div class="flex justify-between items-center bg-space-900/80 p-3 rounded-2xl border border-space-800">
+                            <span class="text-xs text-slate-400 font-bold">Average Recall Speed:</span>
+                            <span class="font-mono font-black text-amber-300 text-lg" x-text="`${avgResponseTime}s`"></span>
+                        </div>
+
+                        <div class="flex justify-between items-center bg-space-900/80 p-3 rounded-2xl border border-space-800">
+                            <span class="text-xs text-slate-400 font-bold">Sprint Best Score:</span>
+                            <span class="font-mono font-black text-cyan-300 text-lg" x-text="`${highScore} / 60`"></span>
+                        </div>
+                    </div>
+
+                    <button @click="setTab('matrix')" class="w-full py-2 bg-space-800 hover:bg-space-700 text-xs font-bold rounded-xl text-slate-200 transition">
+                        View Detailed 12x12 Heatmap &rarr;
+                    </button>
+                </div>
+
+                <!-- Green Light Mastery Gauge -->
+                <div class="glass-panel-gold p-5 rounded-3xl md:col-span-2 flex flex-col justify-between relative overflow-hidden">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <span class="text-[10px] font-black uppercase text-amber-400 tracking-wider">Reflex Daily Goal</span>
+                            <h3 class="font-display font-bold text-xl text-white mt-0.5">Green Light Fluency Engine</h3>
+                        </div>
+                        <div class="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-2xl">
+                            ⚡
+                        </div>
+                    </div>
+
+                    <p class="text-xs text-slate-300 my-3">
+                        Answer multiplication facts accurately and under 2.5 seconds to charge the Green Light gauge. Reaching 100% unlocks Green Light Frenzy mode with 2x coins!
+                    </p>
+
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-xs font-bold font-mono">
+                            <span class="text-slate-400">Green Light Progress</span>
+                            <span class="text-emerald-400" x-text="`${greenLightProgress}%`"></span>
+                        </div>
+                        <div class="w-full bg-slate-950 h-4 rounded-full overflow-hidden border border-slate-800 p-0.5">
+                            <div class="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400 rounded-full transition-all duration-500 shadow-lg"
+                                 :style="`width: ${greenLightProgress}%`"></div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 flex justify-between items-center text-xs">
+                        <span class="text-slate-400 font-bold">Status: <span :class="hasGreenLight ? 'text-emerald-400' : 'text-amber-400'" x-text="hasGreenLight ? 'GREEN LIGHT ACTIVE! 🚀' : 'Charging...'"></span></span>
+                        <button @click="setTab('sprint')" class="px-4 py-2 bg-gradient-to-r from-amber-500 to-emerald-500 text-slate-950 font-display font-black rounded-xl text-xs shadow-lg">
+                            Charge Engine Now &rarr;
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= TAB 2: ASTEROID BLASTER ================= -->
+        <div x-show="activeTab === 'asteroid'" x-transition class="space-y-4 max-w-4xl mx-auto w-full flex-1 flex flex-col justify-center">
+            
+            <!-- Game HUD Control Panel -->
+            <div class="flex items-center justify-between bg-space-900/90 px-4 py-2.5 rounded-2xl border border-rose-500/40 text-xs">
+                <div class="flex items-center space-x-3">
+                    <span class="text-xl">☄️</span>
+                    <div>
+                        <div class="font-display font-bold text-white">Asteroid Blaster 3D</div>
+                        <div class="text-[10px] text-slate-400">Type correct product to fire plasma laser!</div>
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-4">
+                    <div class="text-right">
+                        <div class="text-[10px] text-slate-400 uppercase font-bold">Shield Hull</div>
+                        <div class="w-24 bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
+                            <div class="h-full bg-emerald-500 transition-all duration-300" :style="`width: ${asteroidShipShield}%`"></div>
+                        </div>
+                    </div>
+                    <div class="text-right font-mono">
+                        <div class="text-[10px] text-slate-400 uppercase font-bold">Destroyed</div>
+                        <div class="text-amber-400 font-bold text-sm" x-text="asteroidScore"></div>
+                    </div>
+                    <button @click="toggleAsteroidGame()" class="px-3 py-1.5 rounded-xl font-bold text-xs" :class="isAsteroidPlaying ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'">
+                        <span x-text="isAsteroidPlaying ? 'Pause Mission' : 'Launch Ship'"></span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Space Canvas Sandbox Container -->
+            <div class="relative w-full aspect-[16/9] min-h-[360px] max-h-[500px] bg-black rounded-3xl border-2 border-cyan-500/40 shadow-2xl overflow-hidden flex flex-col justify-between">
+                <canvas id="asteroidCanvas" class="absolute inset-0 w-full h-full block cursor-crosshair"></canvas>
+
+                <!-- Input Overlay Box -->
+                <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20 w-full max-w-xs px-4">
+                    <div class="bg-space-950/80 backdrop-blur-md p-2 rounded-2xl border border-cyan-500/50 shadow-2xl flex items-center space-x-2">
+                        <input type="number" 
+                               x-model="asteroidInput" 
+                               @keydown.enter="checkAsteroidInput()"
+                               placeholder="Type answer..." 
+                               id="asteroidInputElem"
+                               autocomplete="off"
+                               class="w-full text-center text-xl font-mono font-black bg-slate-900 border border-cyan-500/40 focus:border-amber-400 text-amber-300 rounded-xl py-2 px-3 focus:outline-none focus:ring-2 focus:ring-amber-400/30">
+                        <button @click="checkAsteroidInput()" class="px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-emerald-500 text-slate-950 font-display font-black text-xs rounded-xl shadow-lg">
+                            FIRE 🚀
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Start Overlay -->
+                <div x-show="!isAsteroidPlaying" class="absolute inset-0 z-30 bg-space-950/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
+                    <div class="w-16 h-16 rounded-3xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-4xl mb-3 animate-float">
+                        ☄️
+                    </div>
+                    <h3 class="font-display font-black text-2xl text-white">Asteroid Blaster 3D</h3>
+                    <p class="text-xs text-slate-300 max-w-sm mt-1 mb-5">
+                        Incoming space meteorites carry math equations! Solve them fast to target plasma missiles and disintegrate asteroids.
+                    </p>
+                    <button @click="startAsteroidGame()" class="px-8 py-3 bg-gradient-to-r from-rose-500 via-amber-500 to-emerald-500 hover:from-rose-400 hover:to-emerald-400 text-slate-950 font-display font-black text-sm rounded-2xl shadow-xl transform hover:scale-105 transition">
+                        Engage Thrusters & Play! 🔥
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= TAB 3: NINJA DASH ROOFTOP RUNNER ================= -->
+        <div x-show="activeTab === 'ninja'" x-transition class="space-y-4 max-w-4xl mx-auto w-full my-auto flex flex-col justify-center">
+            
+            <!-- Ninja HUD Bar -->
+            <div class="flex items-center justify-between bg-space-900/90 px-4 py-2.5 rounded-2xl border border-emerald-500/40 text-xs">
+                <div class="flex items-center space-x-3">
+                    <span class="text-xl">🥷</span>
+                    <div>
+                        <div class="font-display font-bold text-white">Ninja Dash Rooftop Runner</div>
+                        <div class="text-[10px] text-slate-400">Solve equation to slice bamboo target with Katana!</div>
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-4">
+                    <div class="text-right font-mono">
+                        <div class="text-[10px] text-slate-400 uppercase font-bold">Streak</div>
+                        <div class="text-emerald-400 font-bold text-sm" x-text="`${ninjaStreak}x`"></div>
+                    </div>
+                    <div class="text-right font-mono">
+                        <div class="text-[10px] text-slate-400 uppercase font-bold">Slices</div>
+                        <div class="text-amber-400 font-bold text-sm" x-text="ninjaScore"></div>
+                    </div>
+                    <button @click="toggleNinjaGame()" class="px-3 py-1.5 rounded-xl font-bold text-xs" :class="isNinjaPlaying ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'">
+                        <span x-text="isNinjaPlaying ? 'Pause Dash' : 'Start Run'"></span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Ninja Interactive Canvas -->
+            <div class="relative w-full aspect-[16/9] min-h-[360px] max-h-[500px] bg-black rounded-3xl border-2 border-emerald-500/40 shadow-2xl overflow-hidden flex flex-col justify-between">
+                <canvas id="ninjaCanvas" class="absolute inset-0 w-full h-full block cursor-crosshair"></canvas>
+
+                <!-- Input Overlay Box -->
+                <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20 w-full max-w-xs px-4">
+                    <div class="bg-space-950/85 backdrop-blur-md p-2 rounded-2xl border border-emerald-500/50 shadow-2xl flex items-center space-x-2"
+                         :class="ninjaShake ? 'animate-bounce border-rose-500' : ''">
+                        <input type="number" 
+                               x-model="ninjaInput" 
+                               @keydown.enter="checkNinjaInput()"
+                               placeholder="Type answer..." 
+                               id="ninjaInputElem"
+                               autocomplete="off"
+                               class="w-full text-center text-xl font-mono font-black bg-slate-900 border border-emerald-500/40 focus:border-amber-400 text-amber-300 rounded-xl py-2 px-3 focus:outline-none focus:ring-2 focus:ring-amber-400/30">
+                        <button @click="checkNinjaInput()" class="px-5 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-display font-black text-xs rounded-xl shadow-lg flex items-center space-x-1.5 whitespace-nowrap">
+                            <span>KATANA SLICE</span> ⚔️️
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Start Screen Overlay -->
+                <div x-show="!isNinjaPlaying" class="absolute inset-0 z-30 bg-space-950/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center">
+                    <div class="w-16 h-16 rounded-3xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-4xl mb-3 animate-float">
+                        🥷
+                    </div>
+                    <h3 class="font-display font-black text-2xl text-white">Ninja Dash Rooftop Runner</h3>
+                    <p class="text-xs text-slate-300 max-w-sm mt-1 mb-5">
+                        Type the correct product to trigger a Katana slash, slice bamboo obstacles, and stack combo streaks!
+                    </p>
+                    <button @click="startNinjaGame()" class="px-8 py-3 bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 text-slate-950 font-display font-black text-sm rounded-2xl shadow-xl transform hover:scale-105 transition">
+                        Unsheathe Katana & Dash! ⚔
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= TAB 4: 3-MINUTE SPRINT ================= -->
+        <div x-show="activeTab === 'sprint'" x-transition class="space-y-6 max-w-3xl mx-auto w-full my-auto flex flex-col justify-center">
+            <div class="glass-panel p-5 rounded-3xl border border-cyan-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div class="flex items-center space-x-3">
+                    <div class="w-12 h-12 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-2xl animate-pulse">
+                        ⏱️
+                    </div>
+                    <div>
+                        <h2 class="font-display font-black text-xl text-white">3-Minute Sprint Challenge</h2>
+                        <div class="flex items-center space-x-2 text-xs text-slate-400 mt-0.5">
+                            <span>60 Progressive Facts</span>
+                            <span>•</span>
+                            <span class="text-amber-400 font-bold" x-text="currentTierInfo.name"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center space-x-4">
+                    <div class="bg-space-900/90 border border-cyan-500/30 px-3.5 py-1.5 rounded-xl text-center">
+                        <div class="text-[9px] uppercase font-bold text-slate-400">Time Left</div>
+                        <div class="font-mono font-black text-lg text-cyan-300" x-text="formatTimer(sprintTimeLeft)"></div>
+                    </div>
+
+                    <div class="bg-space-900/90 border border-amber-500/30 px-3.5 py-1.5 rounded-xl text-center">
+                        <div class="text-[9px] uppercase font-bold text-slate-400">Speed (QPM)</div>
+                        <div class="font-mono font-black text-lg text-amber-300" x-text="sprintQpm"></div>
+                    </div>
+
+                    <div class="bg-space-900/90 border border-emerald-500/30 px-3.5 py-1.5 rounded-xl text-center">
+                        <div class="text-[9px] uppercase font-bold text-slate-400">Score</div>
+                        <div class="font-mono font-black text-lg text-emerald-400" x-text="`${sprintScore} / 60`"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel p-6 sm:p-8 rounded-3xl border border-space-700 relative overflow-hidden text-center">
+                <div class="space-y-2 mb-6">
+                    <div class="flex justify-between items-center text-xs font-bold font-mono">
+                        <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider" :class="currentTierInfo.badgeClass" x-text="currentTierInfo.name"></span>
+                        <span class="text-slate-300" x-text="`Question ${sprintActive ? sprintIndex + 1 : 0} of 60`"></span>
+                    </div>
+                    <div class="w-full bg-space-950 h-3 rounded-full overflow-hidden border border-space-800 p-0.5">
+                        <div class="h-full bg-gradient-to-r from-cyan-400 via-emerald-400 to-amber-400 rounded-full transition-all duration-300"
+                             :style="`width: ${(sprintIndex / 60) * 100}%`"></div>
+                    </div>
+                </div>
+
+                <template x-if="sprintActive && currentSprintQuestion">
+                    <div class="space-y-6">
+                        <div class="py-6 bg-space-950/80 rounded-3xl border-2 border-cyan-500/40 shadow-inner flex flex-col items-center justify-center relative">
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1" x-text="currentSprintQuestion.tierName"></span>
+                            <div class="text-5xl sm:text-6xl font-mono font-black text-white tracking-wider my-2">
+                                <span x-text="currentSprintQuestion.num1"></span>
+                                <span class="text-cyan-400">×</span>
+                                <span x-text="currentSprintQuestion.num2"></span>
+                                <span class="text-slate-500">=</span>
+                                <span class="text-amber-300 underline underline-offset-8 decoration-cyan-400 decoration-4" x-text="sprintInput || '?'"></span>
+                            </div>
+                        </div>
+
+                        <div class="max-w-xs mx-auto space-y-3">
+                            <input type="number" 
+                                   x-model="sprintInput" 
+                                   @keydown.enter="checkSprintAnswer()"
+                                   id="sprintInputElem"
+                                   placeholder="Type answer..." 
+                                   autocomplete="off"
+                                   class="w-full text-center text-2xl font-mono font-black bg-slate-900 border-2 border-cyan-500/50 focus:border-amber-400 text-amber-300 rounded-2xl py-2 px-4 focus:outline-none focus:ring-4 focus:ring-amber-400/20"
+                                   :class="sprintShake ? 'animate-bounce border-rose-500' : ''">
+
+                            <div class="grid grid-cols-3 gap-2">
+                                <template x-for="n in [1,2,3,4,5,6,7,8,9]" :key="n">
+                                    <button @click="pressNumpad(n)" class="numpad-btn py-3 rounded-xl font-mono font-black text-xl text-white hover:bg-slate-700">
+                                        <span x-text="n"></span>
+                                    </button>
+                                </template>
+                                <button @click="clearNumpad()" class="numpad-btn py-3 rounded-xl font-mono font-bold text-xs text-rose-400 uppercase hover:bg-slate-700">
+                                    CLEAR
+                                </button>
+                                <button @click="pressNumpad(0)" class="numpad-btn py-3 rounded-xl font-mono font-black text-xl text-white hover:bg-slate-700">
+                                    0
+                                </button>
+                                <button @click="checkSprintAnswer()" class="bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-display font-black text-sm rounded-xl shadow-lg hover:from-emerald-400 hover:to-teal-300 flex items-center justify-center">
+                                    ENTER
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <template x-if="!sprintActive">
+                    <div class="py-8 space-y-4">
+                        <div class="w-16 h-16 rounded-3xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-4xl mx-auto animate-float">
+                            🚀
+                        </div>
+                        <h3 class="font-display font-black text-2xl text-white">Ready for the 60-Fact Sprint?</h3>
+                        <p class="text-xs text-slate-300 max-w-md mx-auto">
+                            Questions start easy with 1s, 2s, 5s, and 10s, then gradually progress to hard facts (7s, 8s, 11s, 12s) and tricky reflex combinations!
+                        </p>
+                        <div class="flex justify-center space-x-3 pt-3">
+                            <button @click="startSprint()" class="px-8 py-3.5 bg-gradient-to-r from-cyan-400 via-teal-400 to-emerald-400 text-slate-950 font-display font-black text-sm rounded-2xl shadow-xl transform hover:scale-105 transition">
+                                Start 3-Minute Challenge 🔥
+                            </button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- ================= TAB 5: 12x12 FLUENCY MATRIX & HEATMAP ================= -->
+        <div x-show="activeTab === 'matrix'" x-transition class="space-y-6 max-w-5xl mx-auto w-full">
+            <div class="glass-panel p-6 sm:p-8 rounded-3xl border border-emerald-500/30 space-y-6">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-space-800 pb-5">
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <h2 class="font-display text-2xl font-black text-white">12×12 Fluency Heatmap</h2>
+                            <span class="bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold px-2 py-0.5 rounded-md border border-emerald-500/30">144 FACTS</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1">Real-time recall speed matrix. Green indicates instant recall under 2.5 seconds!</p>
+                    </div>
+
+                    <div class="flex items-center space-x-3">
+                        <div class="bg-space-900 border border-emerald-500/30 px-4 py-2 rounded-2xl text-center">
+                            <div class="text-[9px] uppercase font-bold text-slate-400">Mastered Facts</div>
+                            <div class="font-mono font-black text-lg text-emerald-400" x-text="`${fluentFactCount} / 144`"></div>
+                        </div>
+
+                        <div class="bg-space-900 border border-amber-500/30 px-4 py-2 rounded-2xl text-center">
+                            <div class="text-[9px] uppercase font-bold text-slate-400">Avg Recall Speed</div>
+                            <div class="font-mono font-black text-lg text-amber-300" x-text="`${avgResponseTime}s`"></div>
+                        </div>
+
+                        <button @click="setTab('sprint')" class="px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-display font-black text-xs rounded-xl shadow-lg">
+                            Drill Target Facts &rarr;
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between gap-3 text-xs font-bold font-mono bg-space-950/80 p-3 rounded-2xl border border-space-800">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-3.5 h-3.5 rounded-md bg-emerald-600/50 border border-emerald-400"></span>
+                        <span class="text-emerald-300">Fluent (&lt; 2.5s)</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span class="w-3.5 h-3.5 rounded-md bg-amber-600/50 border border-amber-400"></span>
+                        <span class="text-amber-300">Learning (&gt; 2.5s)</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span class="w-3.5 h-3.5 rounded-md bg-space-900 border border-space-700"></span>
+                        <span class="text-slate-400">Not Tested Yet</span>
+                    </div>
+                </div>
+
+                <!-- 12x12 Matrix Grid -->
+                <div class="overflow-x-auto pb-2">
+                    <div class="min-w-[640px]">
+                        <div class="grid grid-cols-13 gap-1.5 mb-1.5 text-center font-mono text-xs font-bold text-slate-400">
+                            <div class="p-2 text-cyan-400">×</div>
+                            <template x-for="c in 12" :key="c">
+                                <div class="p-2 bg-space-900 rounded-xl border border-space-800 text-slate-300" x-text="c"></div>
+                            </template>
+                        </div>
+
+                        <template x-for="r in 12" :key="r">
+                            <div class="grid grid-cols-13 gap-1.5 mb-1.5 text-center font-mono text-xs">
+                                <div class="p-2.5 bg-space-900 rounded-xl border border-space-800 text-slate-300 font-bold flex items-center justify-center" x-text="r"></div>
+                                <template x-for="c in 12" :key="c">
+                                    <button @click="drillFact(r, c)" 
+                                            class="p-2.5 rounded-xl border font-mono font-bold transition transform hover:scale-105 flex flex-col items-center justify-center group"
+                                            :class="getFactMatrixColor(r, c)">
+                                        <span class="text-xs text-white group-hover:scale-110 transition" x-text="r * c"></span>
+                                        <span class="text-[8px] opacity-60 mt-0.5" x-text="`${r}×${c}`"></span>
+                                    </button>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= TAB 6: MATH LOCKER & REWARD SHOP ================= -->
+        <div x-show="activeTab === 'shop'" x-transition class="space-y-6 max-w-5xl mx-auto w-full">
+            <div class="glass-panel p-6 sm:p-8 rounded-3xl border border-amber-500/30 space-y-6">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-space-800 pb-5">
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <h2 class="font-display text-2xl font-black text-white">Math Locker & Armory</h2>
+                            <span class="bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold px-2 py-0.5 rounded-md border border-amber-500/30">REWARDS REPOSITORY</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-1">Spend Math Coins to unlock avatars, laser beams, ninja weapons, themes, and legendary titles!</p>
+                    </div>
+                    <div class="bg-amber-500/10 border border-amber-500/30 px-4 py-2 rounded-2xl text-amber-300 font-mono font-black text-base flex items-center space-x-2 self-start sm:self-auto">
+                        <span class="text-xl">🪙</span>
+                        <span x-text="coins"></span>
+                        <span class="text-xs text-amber-400/70 font-normal">Coins</span>
+                    </div>
+                </div>
+
+                <!-- Equipped Gear Shelf -->
+                <div class="bg-space-950/80 p-4 rounded-2xl border border-space-700 space-y-2">
+                    <div class="text-[10px] uppercase font-mono font-bold text-cyan-400 tracking-wider">⚡ EQUIPPED GEAR SHOWCASE</div>
+                    <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
+                        <div class="bg-space-900 p-2.5 rounded-xl border border-space-800 flex items-center space-x-2">
+                            <span class="text-2xl" x-text="equippedAvatar.icon"></span>
+                            <div class="overflow-hidden">
+                                <div class="text-[9px] text-slate-400 font-bold uppercase">Avatar</div>
+                                <div class="font-bold text-white truncate" x-text="equippedAvatar.name"></div>
+                            </div>
+                        </div>
+                        <div class="bg-space-900 p-2.5 rounded-xl border border-space-800 flex items-center space-x-2">
+                            <span class="text-2xl" x-text="equippedLaser.icon"></span>
+                            <div class="overflow-hidden">
+                                <div class="text-[9px] text-slate-400 font-bold uppercase">Space Laser</div>
+                                <div class="font-bold text-cyan-300 truncate" x-text="equippedLaser.name"></div>
+                            </div>
+                        </div>
+                        <div class="bg-space-900 p-2.5 rounded-xl border border-space-800 flex items-center space-x-2">
+                            <span class="text-2xl" x-text="equippedWeapon.icon"></span>
+                            <div class="overflow-hidden">
+                                <div class="text-[9px] text-slate-400 font-bold uppercase">Ninja Weapon</div>
+                                <div class="font-bold text-emerald-300 truncate" x-text="equippedWeapon.name"></div>
+                            </div>
+                        </div>
+                        <div class="bg-space-900 p-2.5 rounded-xl border border-space-800 flex items-center space-x-2">
+                            <span class="text-2xl" x-text="equippedTheme.icon"></span>
+                            <div class="overflow-hidden">
+                                <div class="text-[9px] text-slate-400 font-bold uppercase">UI Theme</div>
+                                <div class="font-bold text-purple-300 truncate" x-text="equippedTheme.name"></div>
+                            </div>
+                        </div>
+                        <div class="bg-space-900 p-2.5 rounded-xl border border-space-800 flex items-center space-x-2 col-span-2 sm:col-span-1">
+                            <span class="text-2xl" x-text="equippedTitle.icon"></span>
+                            <div class="overflow-hidden">
+                                <div class="text-[9px] text-slate-400 font-bold uppercase">Title</div>
+                                <div class="font-bold text-amber-300 truncate" x-text="equippedTitle.name"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Category Filtering -->
+                <div class="flex items-center space-x-2 overflow-x-auto pb-1 text-xs font-bold font-mono">
+                    <button @click="shopFilter = 'all'" 
+                            :class="shopFilter === 'all' ? 'bg-amber-500 text-slate-950 border-amber-400' : 'bg-space-900 text-slate-400 border-space-800 hover:text-white'"
+                            class="px-3.5 py-1.5 rounded-xl border transition whitespace-nowrap">
+                        🛍️ All Items (<span x-text="shopItems.length"></span>)
+                    </button>
+                    <button @click="shopFilter = 'avatar'" 
+                            :class="shopFilter === 'avatar' ? 'bg-amber-500 text-slate-950 border-amber-400' : 'bg-space-900 text-slate-400 border-space-800 hover:text-white'"
+                            class="px-3.5 py-1.5 rounded-xl border transition whitespace-nowrap">
+                        👤 Avatars
+                    </button>
+                    <button @click="shopFilter = 'laser'" 
+                            :class="shopFilter === 'laser' ? 'bg-amber-500 text-slate-950 border-amber-400' : 'bg-space-900 text-slate-400 border-space-800 hover:text-white'"
+                            class="px-3.5 py-1.5 rounded-xl border transition whitespace-nowrap">
+                        🚀 Ship Lasers
+                    </button>
+                    <button @click="shopFilter = 'weapon'" 
+                            :class="shopFilter === 'weapon' ? 'bg-amber-500 text-slate-950 border-amber-400' : 'bg-space-900 text-slate-400 border-space-800 hover:text-white'"
+                            class="px-3.5 py-1.5 rounded-xl border transition whitespace-nowrap">
+                        ⚔️ Ninja Weapons
+                    </button>
+                    <button @click="shopFilter = 'theme'" 
+                            :class="shopFilter === 'theme' ? 'bg-amber-500 text-slate-950 border-amber-400' : 'bg-space-900 text-slate-400 border-space-800 hover:text-white'"
+                            class="px-3.5 py-1.5 rounded-xl border transition whitespace-nowrap">
+                        🎨 UI Themes
+                    </button>
+                    <button @click="shopFilter = 'title'" 
+                            :class="shopFilter === 'title' ? 'bg-amber-500 text-slate-950 border-amber-400' : 'bg-space-900 text-slate-400 border-space-800 hover:text-white'"
+                            class="px-3.5 py-1.5 rounded-xl border transition whitespace-nowrap">
+                        🏆 Titles
+                    </button>
+                </div>
+
+                <!-- Shop Grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    <template x-for="item in getFilteredShopItems()" :key="item.id">
+                        <div class="bg-space-900/90 p-4 rounded-2xl border flex flex-col justify-between relative overflow-hidden transition transform hover:-translate-y-1 shadow-lg"
+                             :class="getRarityCardClass(item.rarity)">
+                            
+                            <div class="absolute top-3 right-3 px-2 py-0.5 rounded-full text-[9px] font-mono font-black uppercase tracking-wider"
+                                 :class="getRarityBadgeClass(item.rarity)" x-text="item.rarity"></div>
+
+                            <div class="text-center pt-2 pb-3">
+                                <div class="text-4xl mb-2 animate-float" x-text="item.icon"></div>
+                                <h4 class="font-display font-bold text-sm text-white" x-text="item.name"></h4>
+                                <p class="text-[10px] text-slate-400 mt-1 min-h-[28px]" x-text="item.desc"></p>
+                            </div>
+
+                            <div class="space-y-1.5 pt-2 border-t border-space-800">
+                                <template x-if="!item.purchased">
+                                    <button @click="buyShopItem(item)" 
+                                            :disabled="coins < item.price"
+                                            class="w-full py-2 rounded-xl font-display font-bold text-xs transition flex items-center justify-center space-x-1"
+                                            :class="coins >= item.price ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-lg' : 'bg-slate-800 text-slate-500 cursor-not-allowed'">
+                                        <span>Unlock (<span x-text="item.price"></span> 🪙)</span>
+                                    </button>
+                                </template>
+
+                                <template x-if="item.purchased">
+                                    <button @click="equipItem(item)" 
+                                            :disabled="isEquipped(item)"
+                                            class="w-full py-2 rounded-xl font-display font-bold text-xs transition"
+                                            :class="isEquipped(item) ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 cursor-default' : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg'">
+                                        <span x-text="isEquipped(item) ? 'EQUIPPED ✔' : 'Equip Gear'"></span>
+                                    </button>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        function mathDashApp() {
+            return {
+                activeTab: 'dashboard',
+                soundEnabled: true,
+                synth: null,
+
+                // Profile
+                level: 3,
+                rankTitle: 'Cadet',
+                xp: 280,
+                nextLevelXp: 500,
+                coins: 180,
+                highScore: 42,
+                greenLightProgress: 65,
+                hasGreenLight: false,
+
+                // Matrix
+                factMatrix: {},
+
+                // 3-Minute Sprint State
+                sprintActive: false,
+                sprintTimeLeft: 180,
+                sprintIndex: 0,
+                sprintScore: 0,
+                sprintInput: '',
+                sprintQuestions: [],
+                sprintTimerInterval: null,
+                sprintShake: false,
+
+                // Asteroid State
+                isAsteroidPlaying: false,
+                asteroidInput: '',
+                asteroidScore: 0,
+                asteroidShipShield: 100,
+                asteroidLoopReq: null,
+
+                // Ninja State
+                isNinjaPlaying: false,
+                ninjaInput: '',
+                ninjaScore: 0,
+                ninjaStreak: 0,
+                ninjaShake: false,
+                ninjaEquation: null,
+                ninjaLoopReq: null,
+
+                // Shop & Locker State
+                shopFilter: 'all',
+                equippedAvatar: { id: 'avatar_cadet', name: 'Cyber Cadet', icon: '🚀', category: 'avatar' },
+                equippedLaser: { id: 'laser_cyan', name: 'Cyan Plasma', icon: '⚡', category: 'laser', color: '#38bdf8' },
+                equippedWeapon: { id: 'weapon_katana', name: 'Steel Katana', icon: '⚔️', category: 'weapon', color: '#34d399' },
+                equippedTheme: { id: 'theme_space', name: 'Space Dark', icon: '🌌', category: 'theme' },
+                equippedTitle: { id: 'title_cadet', name: 'REFLEX REVOLUTION', icon: '🚀', category: 'title' },
+
+                shopItems: [
+                    { id: 'avatar_cadet', name: 'Cyber Cadet', icon: '🚀', category: 'avatar', rarity: 'Common', price: 0, desc: 'Standard space cadet badge.', purchased: true },
+                    { id: 'avatar_cat', name: 'Astro Cat', icon: '🐱', category: 'avatar', rarity: 'Rare', price: 120, desc: 'Space-feline with hypersonic math reflexes.', purchased: false },
+                    { id: 'avatar_ninja', name: 'Cyber Ninja', icon: '🥷', category: 'avatar', rarity: 'Epic', price: 180, desc: 'Stealth rooftop runner avatar.', purchased: false },
+                    { id: 'avatar_dragon', name: 'Quantum Dragon', icon: '🐉', category: 'avatar', rarity: 'Legendary', price: 350, desc: 'Mythical dragon glowing with electric energy.', purchased: false },
+                    { id: 'avatar_wizard', name: 'Galaxy Wizard', icon: '🧙‍♂️', category: 'avatar', rarity: 'Epic', price: 250, desc: 'Master of cosmic equations.', purchased: false },
+                    { id: 'avatar_alien', name: 'Alien Scholar', icon: '👽', category: 'avatar', rarity: 'Rare', price: 150, desc: 'Genius interstellar math researcher.', purchased: false },
+                    { id: 'avatar_bot', name: 'Hyper Mech', icon: '🤖', category: 'avatar', rarity: 'Rare', price: 160, desc: 'Automated 12x12 calculation android.', purchased: false },
+                    { id: 'avatar_phoenix', name: 'Cosmic Phoenix', icon: '🦅', category: 'avatar', rarity: 'Mythic', price: 600, desc: 'Fiery bird born from perfect scores.', purchased: false },
+
+                    { id: 'laser_cyan', name: 'Cyan Plasma', icon: '⚡', category: 'laser', rarity: 'Common', price: 0, desc: 'Standard laser beam for Asteroid Blaster.', color: '#38bdf8', purchased: true },
+                    { id: 'laser_gold', name: 'Golden Particle', icon: '✨', category: 'laser', rarity: 'Rare', price: 200, desc: 'High-intensity golden plasma beam.', color: '#f59e0b', purchased: false },
+                    { id: 'laser_crimson', name: 'Crimson Firestorm', icon: '🔥', category: 'laser', rarity: 'Epic', price: 300, desc: 'Destructive fiery red laser beam.', color: '#ef4444', purchased: false },
+                    { id: 'laser_void', name: 'Void Hole Cannon', icon: '🌌', category: 'laser', rarity: 'Legendary', price: 450, desc: 'Deep violet antimatter beam.', color: '#a855f7', purchased: false },
+                    { id: 'laser_rainbow', name: 'Rainbow Prism', icon: '🌈', category: 'laser', rarity: 'Mythic', price: 650, desc: 'Multicolor photon beam of victory.', color: '#10b981', purchased: false },
+
+                    { id: 'weapon_katana', name: 'Steel Katana', icon: '⚔️', category: 'weapon', rarity: 'Common', price: 0, desc: 'Classic steel sword for Rooftop Dash.', color: '#34d399', purchased: true },
+                    { id: 'weapon_daggers', name: 'Shadow Daggers', icon: '🗡️', category: 'weapon', rarity: 'Rare', price: 150, desc: 'Twin stealth blade set.', color: '#38bdf8', purchased: false },
+                    { id: 'weapon_scythe', name: 'Lightning Scythe', icon: '⚡', category: 'weapon', rarity: 'Epic', price: 280, desc: 'Electric scythe with lightning trails.', color: '#f59e0b', purchased: false },
+                    { id: 'weapon_flame', name: 'Flame Blade', icon: '🔥', category: 'weapon', rarity: 'Epic', price: 320, desc: 'Searing blade that melts targets.', color: '#ef4444', purchased: false },
+                    { id: 'weapon_saber', name: 'Rainbow Lightsaber', icon: '🪄', category: 'weapon', rarity: 'Legendary', price: 500, desc: 'Energy lightsaber with prismatic slashes.', color: '#ec4899', purchased: false },
+
+                    { id: 'theme_space', name: 'Space Dark', icon: '🌌', category: 'theme', rarity: 'Common', price: 0, desc: 'Default sleek space interface.', purchased: true },
+                    { id: 'theme_neon', name: 'Neon Synth Glow', icon: '🎆', category: 'theme', rarity: 'Rare', price: 220, desc: 'Glowing synthwave aesthetics.', purchased: false },
+                    { id: 'theme_gold', name: 'Cyberpunk Gold', icon: '🌟', category: 'theme', rarity: 'Epic', price: 380, desc: 'Luxurious golden neon UI style.', purchased: false },
+                    { id: 'theme_matrix', name: 'Emerald Matrix', icon: '🟩', category: 'theme', rarity: 'Legendary', price: 500, desc: 'Retro hacker matrix green themes.', purchased: false },
+
+                    { id: 'title_cadet', name: 'REFLEX REVOLUTION', icon: '🚀', category: 'title', rarity: 'Common', price: 0, desc: 'Standard starter title.', purchased: true },
+                    { id: 'title_speed', name: 'SPEED DEMON 60', icon: '⚡', category: 'title', rarity: 'Rare', price: 140, desc: 'For lightning fast responders.', purchased: false },
+                    { id: 'title_wizard', name: 'FACT WIZARD', icon: '🪄', category: 'title', rarity: 'Epic', price: 260, desc: 'Demonstrated deep multiplication knowledge.', purchased: false },
+                    { id: 'title_green', name: 'GREEN LIGHT LEGEND', icon: '🟢', category: 'title', rarity: 'Legendary', price: 400, desc: 'Achieved 100% daily fluency gauge.', purchased: false },
+                    { id: 'title_overlord', name: '12x12 OVERLORD', icon: '👑', category: 'title', rarity: 'Mythic', price: 700, desc: 'Mastered all 144 matrix facts under 2.5s.', purchased: false }
+                ],
+
+                init() {
+                    try {
+                        this.synth = new Tone.Synth().toDestination();
+                    } catch(e){}
+
+                    this.loadSavedData();
+                    this.generateSprintQuestions();
+                    this.initNinjaEquation();
+                    this.initAsteroidCanvasEngine();
+                    this.initNinjaCanvasEngine();
+                },
+
+                setTab(tab) {
+                    this.activeTab = tab;
+                    if (tab === 'asteroid' && !this.isAsteroidPlaying) {
+                        setTimeout(() => this.resizeAsteroidCanvas(), 100);
+                    } else if (tab === 'ninja' && !this.isNinjaPlaying) {
+                        setTimeout(() => this.resizeNinjaCanvas(), 100);
+                    }
+                },
+
+                toggleSound() {
+                    this.soundEnabled = !this.soundEnabled;
+                },
+
+                playSound(type) {
+                    if (!this.soundEnabled || !this.synth) return;
+                    try {
+                        Tone.start();
+                        if (type === 'correct') {
+                            this.synth.triggerAttackRelease('C5', '8n');
+                        } else if (type === 'wrong') {
+                            this.synth.triggerAttackRelease('A2', '8n');
+                        } else if (type === 'laser') {
+                            this.synth.triggerAttackRelease('G5', '16n');
+                        } else if (type === 'boom') {
+                            this.synth.triggerAttackRelease('E2', '8n');
+                        } else if (type === 'slash') {
+                            this.synth.triggerAttackRelease('E5', '16n');
+                        }
+                    } catch(e) {}
+                },
+
+                loadSavedData() {
+                    const saved = localStorage.getItem('mathdash_60_save');
+                    if (saved) {
+                        try {
+                            const parsed = JSON.parse(saved);
+                            this.level = parsed.level || 3;
+                            this.coins = parsed.coins || 180;
+                            this.xp = parsed.xp || 280;
+                            this.highScore = parsed.highScore || 42;
+                            if (parsed.factMatrix) this.factMatrix = parsed.factMatrix;
+                            if (parsed.equippedAvatar) this.equippedAvatar = parsed.equippedAvatar;
+                            if (parsed.equippedLaser) this.equippedLaser = parsed.equippedLaser;
+                            if (parsed.equippedWeapon) this.equippedWeapon = parsed.equippedWeapon;
+                            if (parsed.equippedTheme) this.equippedTheme = parsed.equippedTheme;
+                            if (parsed.equippedTitle) this.equippedTitle = parsed.equippedTitle;
+                            if (parsed.purchasedIds && Array.isArray(parsed.purchasedIds)) {
+                                this.shopItems.forEach(item => {
+                                    if (parsed.purchasedIds.includes(item.id)) item.purchased = true;
+                                });
+                            }
+                        } catch(e){}
+                    }
+                },
+
+                saveData() {
+                    const purchasedIds = this.shopItems.filter(i => i.purchased).map(i => i.id);
+                    const data = {
+                        level: this.level,
+                        coins: this.coins,
+                        xp: this.xp,
+                        highScore: this.highScore,
+                        factMatrix: this.factMatrix,
+                        equippedAvatar: this.equippedAvatar,
+                        equippedLaser: this.equippedLaser,
+                        equippedWeapon: this.equippedWeapon,
+                        equippedTheme: this.equippedTheme,
+                        equippedTitle: this.equippedTitle,
+                        purchasedIds: purchasedIds
+                    };
+                    localStorage.setItem('mathdash_60_save', JSON.stringify(data));
+                },
+
+                getFilteredShopItems() {
+                    if (!this.shopItems) return [];
+                    if (this.shopFilter === 'all') return this.shopItems;
+                    return this.shopItems.filter(i => i.category === this.shopFilter);
+                },
+
+                getRarityCardClass(rarity) {
+                    if (rarity === 'Mythic') return 'border-amber-400/80 shadow-amber-500/20';
+                    if (rarity === 'Legendary') return 'border-purple-500/80 shadow-purple-500/20';
+                    if (rarity === 'Epic') return 'border-cyan-500/80 shadow-cyan-500/20';
+                    if (rarity === 'Rare') return 'border-emerald-500/80 shadow-emerald-500/20';
+                    return 'border-space-700 shadow-none';
+                },
+
+                getRarityBadgeClass(rarity) {
+                    if (rarity === 'Mythic') return 'bg-amber-500/20 text-amber-300 border border-amber-500/40';
+                    if (rarity === 'Legendary') return 'bg-purple-500/20 text-purple-300 border border-purple-500/40';
+                    if (rarity === 'Epic') return 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40';
+                    if (rarity === 'Rare') return 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40';
+                    return 'bg-slate-800 text-slate-400 border border-slate-700';
+                },
+
+                isEquipped(item) {
+                    if (item.category === 'avatar') return this.equippedAvatar.id === item.id;
+                    if (item.category === 'laser') return this.equippedLaser.id === item.id;
+                    if (item.category === 'weapon') return this.equippedWeapon.id === item.id;
+                    if (item.category === 'theme') return this.equippedTheme.id === item.id;
+                    if (item.category === 'title') return this.equippedTitle.id === item.id;
+                    return false;
+                },
+
+                equipItem(item) {
+                    if (!item.purchased) return;
+                    if (item.category === 'avatar') this.equippedAvatar = item;
+                    else if (item.category === 'laser') this.equippedLaser = item;
+                    else if (item.category === 'weapon') this.equippedWeapon = item;
+                    else if (item.category === 'theme') this.equippedTheme = item;
+                    else if (item.category === 'title') this.equippedTitle = item;
+
+                    this.playSound('correct');
+                    this.saveData();
+                },
+
+                buyShopItem(item) {
+                    if (this.coins >= item.price && !item.purchased) {
+                        this.coins -= item.price;
+                        item.purchased = true;
+                        this.equipItem(item);
+                        confetti({ particleCount: 90, spread: 80, origin: { y: 0.6 } });
+                        this.saveData();
+                    }
+                },
+
+                get fluentFactCount() {
+                    return Object.values(this.factMatrix).filter(f => f.fluent || f.time <= 2.5).length;
+                },
+
+                get avgResponseTime() {
+                    const times = Object.values(this.factMatrix).map(f => f.time).filter(Boolean);
+                    if (!times.length) return '0.0';
+                    const sum = times.reduce((a, b) => a + b, 0);
+                    return (sum / times.length).toFixed(1);
+                },
+
+                getFactMatrixColor(r, c) {
+                    const key = `${r}_${c}`;
+                    const data = this.factMatrix[key];
+                    if (!data) return 'bg-space-900 border-space-800 text-slate-400';
+                    if (data.fluent || data.time <= 2.5) return 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300';
+                    return 'bg-amber-950/80 border-amber-500/60 text-amber-300';
+                },
+
+                drillFact(r, c) {
+                    this.activeTab = 'sprint';
+                    this.startSprint();
+                },
+
+                get currentTierInfo() {
+                    if (this.sprintIndex < 15) return { name: 'Tier 1: Warmup Facts (1, 2, 5, 10)', badgeClass: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' };
+                    if (this.sprintIndex < 30) return { name: 'Tier 2: Core Facts (3, 4, 6, 9)', badgeClass: 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' };
+                    if (this.sprintIndex < 45) return { name: 'Tier 3: Advanced Facts (7, 8, 11, 12)', badgeClass: 'bg-amber-500/20 text-amber-300 border border-amber-500/30' };
+                    return { name: 'Tier 4: Reflex Mastery & Boss Combo', badgeClass: 'bg-rose-500/20 text-rose-300 border border-rose-500/30' };
+                },
+
+                get currentSprintQuestion() {
+                    return this.sprintQuestions[this.sprintIndex] || null;
+                },
+
+                get sprintQpm() {
+                    const elapsed = 180 - this.sprintTimeLeft;
+                    if (elapsed <= 0) return 0;
+                    return Math.round((this.sprintIndex / elapsed) * 60);
+                },
+
+                formatTimer(seconds) {
+                    const m = Math.floor(seconds / 60);
+                    const s = seconds % 60;
+                    return `${m}:${s < 10 ? '0' : ''}${s}`;
+                },
+
+                generateSprintQuestions() {
+                    let list = [];
+                    for(let i = 0; i < 15; i++) {
+                        let easySet = [1, 2, 5, 10];
+                        let n1 = easySet[Math.floor(Math.random() * easySet.length)];
+                        let n2 = Math.floor(Math.random() * 12) + 1;
+                        list.push({ num1: n1, num2: n2, answer: n1 * n2, tierName: 'Warmup Fact' });
+                    }
+                    for(let i = 0; i < 15; i++) {
+                        let midSet = [3, 4, 6, 9];
+                        let n1 = midSet[Math.floor(Math.random() * midSet.length)];
+                        let n2 = Math.floor(Math.random() * 12) + 1;
+                        list.push({ num1: n1, num2: n2, answer: n1 * n2, tierName: 'Core Fact' });
+                    }
+                    for(let i = 0; i < 15; i++) {
+                        let hardSet = [7, 8, 11, 12];
+                        let n1 = hardSet[Math.floor(Math.random() * hardSet.length)];
+                        let n2 = Math.floor(Math.random() * 12) + 1;
+                        list.push({ num1: n1, num2: n2, answer: n1 * n2, tierName: 'Advanced Fact' });
+                    }
+                    for(let i = 0; i < 15; i++) {
+                        let n1 = Math.floor(Math.random() * 6) + 7;
+                        let n2 = Math.floor(Math.random() * 6) + 7;
+                        list.push({ num1: n1, num2: n2, answer: n1 * n2, tierName: 'Reflex Mastery' });
+                    }
+                    this.sprintQuestions = list;
+                },
+
+                startSprint() {
+                    this.generateSprintQuestions();
+                    this.sprintActive = true;
+                    this.sprintTimeLeft = 180;
+                    this.sprintIndex = 0;
+                    this.sprintScore = 0;
+                    this.sprintInput = '';
+
+                    if (this.sprintTimerInterval) clearInterval(this.sprintTimerInterval);
+                    this.sprintTimerInterval = setInterval(() => {
+                        this.sprintTimeLeft--;
+                        if (this.sprintTimeLeft <= 0) {
+                            this.endSprint();
+                        }
+                    }, 1000);
+
+                    setTimeout(() => {
+                        const elem = document.getElementById('sprintInputElem');
+                        if (elem) elem.focus();
+                    }, 100);
+                },
+
+                endSprint() {
+                    this.sprintActive = false;
+                    if (this.sprintTimerInterval) clearInterval(this.sprintTimerInterval);
+                    if (this.sprintScore > this.highScore) {
+                        this.highScore = this.sprintScore;
+                    }
+                    this.coins += this.sprintScore;
+                    this.xp += this.sprintScore * 5;
+                    confetti({ particleCount: 120, spread: 90, origin: { y: 0.5 } });
+                    this.saveData();
+                },
+
+                pressNumpad(num) {
+                    this.sprintInput += String(num);
+                },
+
+                clearNumpad() {
+                    this.sprintInput = '';
+                },
+
+                checkSprintAnswer() {
+                    if (!this.sprintActive || !this.currentSprintQuestion) return;
+                    const ans = parseInt(this.sprintInput);
+                    if (ans === this.currentSprintQuestion.answer) {
+                        this.playSound('correct');
+                        this.sprintScore++;
+                        this.coins += 1;
+                        this.xp += 5;
+                        const key = `${this.currentSprintQuestion.num1}_${this.currentSprintQuestion.num2}`;
+                        this.factMatrix[key] = { time: 1.5, fluent: true };
+
+                        this.sprintInput = '';
+                        this.sprintIndex++;
+                        if (this.sprintIndex >= 60) {
+                            this.endSprint();
+                        }
+                    } else {
+                        this.playSound('wrong');
+                        this.sprintShake = true;
+                        setTimeout(() => this.sprintShake = false, 400);
+                        this.sprintInput = '';
+                    }
+                },
+
+                initAsteroidCanvasEngine() {
+                    window.addEventListener('resize', () => this.resizeAsteroidCanvas());
+                },
+
+                resizeAsteroidCanvas() {
+                    const canvas = document.getElementById('asteroidCanvas');
+                    if (!canvas) return;
+                    const rect = canvas.parentElement.getBoundingClientRect();
+                    canvas.width = rect.width;
+                    canvas.height = rect.height;
+                },
+
+                toggleAsteroidGame() {
+                    if (this.isAsteroidPlaying) {
+                        this.isAsteroidPlaying = false;
+                        if (this.asteroidLoopReq) cancelAnimationFrame(this.asteroidLoopReq);
+                    } else {
+                        this.startAsteroidGame();
+                    }
+                },
+
+                startAsteroidGame() {
+                    this.isAsteroidPlaying = true;
+                    this.asteroidScore = 0;
+                    this.asteroidShipShield = 100;
+                    this.resizeAsteroidCanvas();
+
+                    const canvas = document.getElementById('asteroidCanvas');
+                    if (!canvas) return;
+                    const ctx = canvas.getContext('2d');
+
+                    let asteroids = [];
+                    let lasers = [];
+                    let particles = [];
+                    let stars = [];
+
+                    for (let i = 0; i < 100; i++) {
+                        stars.push({
+                            x: Math.random() * canvas.width,
+                            y: Math.random() * canvas.height,
+                            size: Math.random() * 2 + 0.5,
+                            speed: Math.random() * 0.8 + 0.2
+                        });
+                    }
+
+                    const spawnAsteroid = () => {
+                        let n1 = Math.floor(Math.random() * 12) + 1;
+                        let n2 = Math.floor(Math.random() * 12) + 1;
+                        let radius = 32 + Math.random() * 10;
+
+                        let vertCount = 8;
+                        let vertices = [];
+                        for (let i = 0; i < vertCount; i++) {
+                            let angle = (i / vertCount) * Math.PI * 2;
+                            let dist = radius * (0.8 + Math.random() * 0.4);
+                            vertices.push({ x: Math.cos(angle) * dist, y: Math.sin(angle) * dist });
+                        }
+
+                        asteroids.push({
+                            x: 60 + Math.random() * (canvas.width - 120),
+                            y: -50,
+                            radius: radius,
+                            speed: 0.5 + Math.random() * 0.7,
+                            rot: 0,
+                            rotSpeed: (Math.random() - 0.5) * 0.02,
+                            num1: n1,
+                            num2: n2,
+                            ans: n1 * n2,
+                            vertices: vertices
+                        });
+                    };
+
+                    spawnAsteroid();
+                    spawnAsteroid();
+                    let lastSpawn = Date.now();
+
+                    const renderLoop = () => {
+                        if (!this.isAsteroidPlaying) return;
+
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                        ctx.fillStyle = '#ffffff';
+                        stars.forEach(s => {
+                            s.y += s.speed;
+                            if (s.y > canvas.height) s.y = 0;
+                            ctx.fillRect(s.x, s.y, s.size, s.size);
+                        });
+
+                        if (Date.now() - lastSpawn > 3500) {
+                            spawnAsteroid();
+                            lastSpawn = Date.now();
+                        }
+
+                        for (let i = asteroids.length - 1; i >= 0; i--) {
+                            let ast = asteroids[i];
+                            ast.y += ast.speed;
+                            ast.rot += ast.rotSpeed;
+
+                            if (ast.y > canvas.height - 40) {
+                                this.asteroidShipShield = Math.max(0, this.asteroidShipShield - 20);
+                                this.playSound('boom');
+                                asteroids.splice(i, 1);
+                                if (this.asteroidShipShield <= 0) {
+                                    this.isAsteroidPlaying = false;
+                                }
+                                continue;
+                            }
+
+                            ctx.save();
+                            ctx.translate(ast.x, ast.y);
+                            ctx.rotate(ast.rot);
+
+                            let rockGrad = ctx.createRadialGradient(-5, -5, 2, 0, 0, ast.radius);
+                            rockGrad.addColorStop(0, '#64748b');
+                            rockGrad.addColorStop(1, '#0f172a');
+                            ctx.fillStyle = rockGrad;
+                            ctx.strokeStyle = '#38bdf8';
+                            ctx.lineWidth = 1.5;
+
+                            ctx.beginPath();
+                            ctx.moveTo(ast.vertices[0].x, ast.vertices[0].y);
+                            for (let v = 1; v < ast.vertices.length; v++) {
+                                ctx.lineTo(ast.vertices[v].x, ast.vertices[v].y);
+                            }
+                            ctx.closePath();
+                            ctx.fill();
+                            ctx.stroke();
+                            ctx.restore();
+
+                            ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                            ctx.strokeStyle = '#38bdf8';
+                            ctx.lineWidth = 1;
+                            ctx.beginPath();
+                            ctx.roundRect(ast.x - 35, ast.y - 12, 70, 24, 6);
+                            ctx.fill();
+                            ctx.stroke();
+
+                            ctx.fillStyle = '#f59e0b';
+                            ctx.font = 'bold 13px "JetBrains Mono", monospace';
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillText(`${ast.num1} × ${ast.num2}`, ast.x, ast.y);
+                        }
+
+                        for (let l = lasers.length - 1; l >= 0; l--) {
+                            let laser = lasers[l];
+                            let dx = laser.targetX - laser.x;
+                            let dy = laser.targetY - laser.y;
+                            let dist = Math.hypot(dx, dy);
+
+                            if (dist < 15) {
+                                this.playSound('boom');
+                                for (let p = 0; p < 20; p++) {
+                                    particles.push({
+                                        x: laser.targetX,
+                                        y: laser.targetY,
+                                        vx: (Math.random() - 0.5) * 6,
+                                        vy: (Math.random() - 0.5) * 6,
+                                        size: Math.random() * 4 + 2,
+                                        color: (this.equippedLaser && this.equippedLaser.color) ? this.equippedLaser.color : '#38bdf8',
+                                        life: 1.0
+                                    });
+                                }
+                                lasers.splice(l, 1);
+                            } else {
+                                laser.x += (dx / dist) * 16;
+                                laser.y += (dy / dist) * 16;
+
+                                const laserColor = (this.equippedLaser && this.equippedLaser.color) ? this.equippedLaser.color : '#38bdf8';
+                                ctx.strokeStyle = laserColor;
+                                ctx.lineWidth = 4;
+                                ctx.beginPath();
+                                ctx.moveTo(laser.x, laser.y);
+                                ctx.lineTo(laser.x - (dx / dist) * 12, laser.y - (dy / dist) * 12);
+                                ctx.stroke();
+                            }
+                        }
+
+                        for (let p = particles.length - 1; p >= 0; p--) {
+                            let part = particles[p];
+                            part.x += part.vx;
+                            part.y += part.vy;
+                            part.life -= 0.04;
+
+                            if (part.life <= 0) {
+                                particles.splice(p, 1);
+                            } else {
+                                ctx.globalAlpha = part.life;
+                                ctx.fillStyle = part.color;
+                                ctx.beginPath();
+                                ctx.arc(part.x, part.y, part.size, 0, Math.PI * 2);
+                                ctx.fill();
+                            }
+                        }
+                        ctx.globalAlpha = 1.0;
+
+                        const shipX = canvas.width / 2;
+                        const shipY = canvas.height - 30;
+
+                        ctx.save();
+                        ctx.translate(shipX, shipY);
+                        ctx.fillStyle = '#0284c7';
+                        ctx.strokeStyle = '#38bdf8';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(0, -20);
+                        ctx.lineTo(16, 12);
+                        ctx.lineTo(0, 6);
+                        ctx.lineTo(-16, 12);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+                        ctx.restore();
+
+                        this.asteroidLoopReq = requestAnimationFrame(renderLoop);
+                    };
+
+                    this.checkAsteroidInput = () => {
+                        if (!this.asteroidInput) return;
+                        const userVal = parseInt(this.asteroidInput);
+
+                        let matchIdx = asteroids.findIndex(a => a.ans === userVal);
+                        if (matchIdx !== -1) {
+                            let target = asteroids[matchIdx];
+                            this.playSound('laser');
+
+                            lasers.push({
+                                x: canvas.width / 2,
+                                y: canvas.height - 30,
+                                targetX: target.x,
+                                targetY: target.y
+                            });
+
+                            setTimeout(() => {
+                                this.asteroidScore++;
+                                this.coins += 2;
+                                this.xp += 6;
+                                const key = `${target.num1}_${target.num2}`;
+                                this.factMatrix[key] = { time: 1.8, fluent: true };
+                            }, 200);
+
+                            asteroids.splice(matchIdx, 1);
+                            this.asteroidInput = '';
+                        } else {
+                            this.playSound('wrong');
+                        }
+                    };
+
+                    renderLoop();
+                },
+
+                initNinjaEquation() {
+                    let n1 = Math.floor(Math.random() * 12) + 1;
+                    let n2 = Math.floor(Math.random() * 12) + 1;
+                    this.ninjaEquation = { num1: n1, num2: n2, ans: n1 * n2 };
+                },
+
+                initNinjaCanvasEngine() {
+                    window.addEventListener('resize', () => this.resizeNinjaCanvas());
+                },
+
+                resizeNinjaCanvas() {
+                    const canvas = document.getElementById('ninjaCanvas');
+                    if (!canvas) return;
+                    const rect = canvas.parentElement.getBoundingClientRect();
+                    canvas.width = rect.width;
+                    canvas.height = rect.height;
+                },
+
+                toggleNinjaGame() {
+                    if (this.isNinjaPlaying) {
+                        this.isNinjaPlaying = false;
+                        if (this.ninjaLoopReq) cancelAnimationFrame(this.ninjaLoopReq);
+                    } else {
+                        this.startNinjaGame();
+                    }
+                },
+
+                startNinjaGame() {
+                    this.isNinjaPlaying = true;
+                    this.ninjaScore = 0;
+                    this.ninjaStreak = 0;
+                    this.initNinjaEquation();
+                    this.resizeNinjaCanvas();
+
+                    const canvas = document.getElementById('ninjaCanvas');
+                    if (!canvas) return;
+                    const ctx = canvas.getContext('2d');
+
+                    let sliceFx = null;
+
+                    const renderLoop = () => {
+                        if (!this.isNinjaPlaying) return;
+
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                        let skyGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+                        skyGrad.addColorStop(0, '#040711');
+                        skyGrad.addColorStop(1, '#111936');
+                        ctx.fillStyle = skyGrad;
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                        ctx.fillStyle = '#080d1e';
+                        ctx.fillRect(0, canvas.height - 70, canvas.width, 70);
+                        ctx.strokeStyle = '#10b981';
+                        ctx.lineWidth = 3;
+                        ctx.beginPath();
+                        ctx.moveTo(0, canvas.height - 70);
+                        ctx.lineTo(canvas.width, canvas.height - 70);
+                        ctx.stroke();
+
+                        const ninjaX = 80;
+                        const ninjaY = canvas.height - 110;
+                        ctx.font = '40px serif';
+                        ctx.fillText('🥷', ninjaX, ninjaY + 30);
+
+                        const targetX = canvas.width - 180;
+                        const targetY = canvas.height - 120;
+
+                        ctx.fillStyle = '#065f46';
+                        ctx.strokeStyle = '#34d399';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.roundRect(targetX, targetY, 70, 50, 10);
+                        ctx.fill();
+                        ctx.stroke();
+
+                        if (this.ninjaEquation) {
+                            ctx.fillStyle = '#f59e0b';
+                            ctx.font = 'bold 15px "JetBrains Mono", monospace';
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillText(`${this.ninjaEquation.num1} × ${this.ninjaEquation.num2}`, targetX + 35, targetY + 25);
+                        }
+
+                        if (sliceFx) {
+                            const progress = (Date.now() - sliceFx.time) / sliceFx.duration;
+                            if (progress >= 1) {
+                                sliceFx = null;
+                            } else {
+                                ctx.save();
+                                const bladeColor = (this.equippedWeapon && this.equippedWeapon.color) ? this.equippedWeapon.color : '#34d399';
+                                ctx.strokeStyle = bladeColor;
+                                ctx.lineWidth = 6 * (1 - progress);
+                                ctx.beginPath();
+                                ctx.moveTo(ninjaX + 20, ninjaY - 10);
+                                ctx.lineTo(targetX + 50, targetY + 40);
+                                ctx.stroke();
+                                ctx.restore();
+                            }
+                        }
+
+                        this.ninjaLoopReq = requestAnimationFrame(renderLoop);
+                    };
+
+                    this.checkNinjaInput = () => {
+                        if (!this.ninjaInput || !this.ninjaEquation) return;
+                        const val = parseInt(this.ninjaInput);
+
+                        if (val === this.ninjaEquation.ans) {
+                            this.playSound('slash');
+                            sliceFx = { time: Date.now(), duration: 250 };
+
+                            this.ninjaScore++;
+                            this.ninjaStreak++;
+                            this.coins += 2;
+                            this.xp += 6;
+
+                            const key = `${this.ninjaEquation.num1}_${this.ninjaEquation.num2}`;
+                            this.factMatrix[key] = { time: 1.6, fluent: true };
+
+                            this.ninjaInput = '';
+                            this.initNinjaEquation();
+                        } else {
+                            this.playSound('wrong');
+                            this.ninjaStreak = 0;
+                            this.ninjaShake = true;
+                            setTimeout(() => this.ninjaShake = false, 400);
+                            this.ninjaInput = '';
+                        }
+                    };
+
+                    renderLoop();
+                }
+            }
+        }
+    </script>
+</body>
+</html>
